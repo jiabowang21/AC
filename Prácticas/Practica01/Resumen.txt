@@ -1,0 +1,131 @@
+﻿Laboratorio Sesión 01: Compilación y rendimiento
+
+Parámetros de compilación de un programa
+
+programas: miprograma_parte1.c miprograma_parte2.c
+
+PASO 1:
+gcc -S miprograma_parte1.c miprograma_parte2.c 
+Con esto obtendremos los ficheros miprograma_parte1.s y miprograma_parte2.c que contendrán el código ensamblador de los anteriores programas.
+
+PASO 2:
+Para obtener con ellos el código objeto usaremos:
+as miprograma_parte1.s miprograma_parte2.s
+gcc -c miprograma_parte1.s miprograma_parte2.s
+Cualquiera de las 2 son válidas.
+Entonces, obtendremos los ficheros miprograma_parte1.o y miprograma_parte2.o que contendrán el código objeto equivalente.
+
+PASO 3:
+Finalmente deberemos juntar (linkar) el código de ambos programas y generar uno solo.
+ld -o miprograma miprograma_parte1.o miprograma_parte2.o
+gcc -o miprograma miprograma_parte1.o miprograma_parte2.o
+Cualquiera de las 2 son válidas.
+Con lo que obtendremos el ejecutable miprograma.
+
+También podemos realizar los tres pasos directamente.
+gcc -o miprograma miprograma_parte1.c miprograma_parte2.c
+
+Muchas veces al compilar no querremos que la salida sea cómoda para debuggar, sino que buscaremos que el código compilado sea rápido. Para ello debemos activar las optimizaciones con la línea:
+gcc -O -o miprograma miprograma.c
+
+Existen 4 niveles de optimización:
+1. -O0: no optimizar.
+2. -O1: aplica las optimizaciones básicas (equivale a -O).
+3. -O2: el compilador aplicará optimizaciones avanzadas que pueden llevarle bastante tiempo (aunque no en programas sencillos).
+4. -O3: el compilador aplicará optimizaciones arriesgadas que pueden llegar a ralentizar el programa.
+
+Consideraciones prácticas a la hora de medir el rendimiento
+
+Podemos encontrarnos una serie de preguntas como: ¿cómo se sabe cómo es de rápido un programa?
+Se mide programas ejecutándolos muchas veces y hacer una media del tiempo.
+También se puede evaluar el tiempo de un programa con la cantidad de instrucciones que ejecuta (instrucciones dinámicas). Para contar cuántas instrucciones ejecuta un procesador en un programa tenemos varios métodos:
+- Cálculo directo: Es la forma más rápida para códigos simples y la más complicada para programas largos. Consiste, en hacer la cuenta teórica: “si mi programa tiene un bucle que da 1000 vueltas y cada vuelta ejecuta 5 instrucciones y fuera del bucle hay otras 50 instrucciones, en total, mi programa ejecuta 5050 instrucciones”. Para programas complejos se complica porque los condicionales no suelen tener las mismas instrucciones en cada rama, los bucles no son deterministas, las subrutinas son difíciles de contar y los programas ejecutan diferentes instrucciones para diferentes entradas. Para programas medios es inaplicable.
+- Contadores Hardware: Este sistema consiste en acceder directamente a diferentes registros contador internos al procesador que nos pueden decir, entre otras cosas, cuántas instrucciones se ejecutan, cuántos saltos se han predicho correctamente o cuántos fallos de caché ha habido. Es a la vez un sistema rápido y fiable ya que es el propio procesador el que informa de su estado y, además, al ser contadores hardware, el programa se ejecuta a su velocidad original. Como inconvenientes están que no todos los procesadores tienen contadores hardware (o no tienen los mismos o no se accede de la misma forma), que es necesario recompilar el kernel de Linux para poder acceder a ellos y que este sistema no permite alterar el código original para verificar cambios (a no ser que tengamos las fuentes y recompilemos). 
+- Instrumentar el código: Instrumentar el código es un sistema que consiste en añadir al código ejecutable del programa (o bien en la compilación o bien en la ejecución) nuevas instrucciones (directamente en código máquina) que se encargan de realizar las medidas deseadas, por ejemplo, contar las instrucciones ejecutadas o averiguar los datos que se envían a la memoria. Los mayores inconvenientes de este método son que al añadir más instrucciones el código se ejecuta más lento y que, además, el código que se ejecuta no es el original sino el modificado. Sin embargo, este sistema permite realizar numerosos tipos de medidas e, incluso, modificar el funcionamiento del programa cambiándole unas instrucciones por otras.
+- Simular el procesador: Este último método es el más complejo y, a la vez, el que permite mayor control del sistema. Consiste en crear un programa software que “emula” o “simula” el comportamiento del procesador que queremos estudiar. Este programa es el que lee el código compilado y “ejecuta” el programa que queremos estudiar. Este sistema es con mucha diferencia el más lento y precisa tener un conocimiento muy detallado de cómo funciona el procesador a estudiar, pero, por otro lado, permite saber el resultado de cualquier cambio en el procesador (como por ejemplo averiguar si un nuevo multiplicador que es más lento, pero realiza más multiplicaciones en paralelo hace que los programas se ejecuten más rápido o no).
+
+Para obtener el número de instrucciones dinámicas utilizaremos el programa de instrumentación Valgrind. valgrind --tool=lackey ./miejecutable 
+Entre toda la información que imprime nos interesa la que se encuentra a la derecha del epígrafe guest instrs que corresponde a las instrucciones ejecutadas en el código ensamblador del procesador.
+Para medir el tiempo de ejecución o los ciclos utilizaremos dos códigos: el programa tiempo.c y la librería cycle.h. El primero contiene la rutina GetTime() que devuelve un float con el tiempo actual en milisegundos. La segunda contiene la rutina getticks() que devuelve una variable de tipo ticks que se puede usar como entrada para la rutina elapsed() que devuelve un double con los tics de reloj que han pasado en la ejecución de un programa. Recordad que en el primer caso se debe incluir el nombre del fichero fuente en la orden de compilación (por ejemplo, gcc -o simple simple.c tiempo.c). A continuación, se muestran sendos ejemplos de cómo medir el tiempo y los tics en un determinado código:
+
+Aunque evidentemente un programa con el código para medir tiempos ejecuta más instrucciones dinámicas que uno que no lo contiene y, a su vez, un código que está contando las instrucciones dinámicas tarda más en ejecutarse que uno que no, la influencia en estas prácticas es pequeña, así que ambas medidas pueden hacerse a la vez. Eso sí, no en la misma ejecución donde se usa valgrind. 
+Finalmente, el último parámetro a tener en cuenta cuando se están midiendo tiempos o ciclos es que en los procesadores actuales de múltiples núcleos existe la posibilidad de que un programa migre de un procesador a otro. Para evitar que este efecto influya en nuestras medidas nos aseguraremos de que el programa se ejecuta con afinidad a un solo procesador con la orden:
+taskset -c 1 miprograma 
+Si además tenemos acceso de root al sistema (es decir, esto NO aplica al laboratorio, es puramente informativo) puede ser bueno asignar la máxima prioridad a nuestro programa de forma que el Sistema Operativo no lo interrumpa con otro programa: 
+chrt -f 99 miprograma 
+Lo que sí se puede hacer es darle al programa diferentes prioridades de usuario, siendo la -19 la más favorable: 
+nice -19 miprograma 
+
+MIPS 
+Una vez que somos capaces de medir las instrucciones y el tiempo que tarda en ejecutarse un programa podemos obtener con facilidad los MIPS (Millones de Instrucciones Por Segundo) que realiza el procesador. La fórmula es simple: 
+
+Sin embargo, hay que tener en cuenta que esta medida depende mucho del procesador (si varía el ISA varían los MIPS), del compilador (dos compiladores distintos no generan el mismo código y por tanto no se puede comparar) y de las optimizaciones (que un programa esté más optimizado no significa que el procesador sea más rápido). Así que en realidad no es muy fiable a la hora de comparar procesadores distintos. Si que sirven en cambio para comparar procesadores de la misma familia e incluso para comparar sistemas. Linux, por ejemplo, siempre calcula los MIPS en tiempo de arranque del sistema. Podéis comprobarlo ejecutando: 
+dmesg | grep MIPS
+
+Cómo hacer las medias 
+Finalmente, un punto importante a la hora de realizar todas estas medidas es decidir cómo obtener las medias. Como ya se ha comentado, el tiempo e incluso los ciclos de ejecución de un programa están sujetos a una fuerte variabilidad. Para reducir este efecto, cuando toméis medidas variables deberíais hacer una media de las tres medidas más “razonables” de una muestra de cinco. Es decir: realizaremos la medida deseada 5 veces y a continuación descartaremos el valor más alto y el más bajo. Finalmente, el valor buscado sería la media de las tres medidas restantes. Por motivos de tiempo, no es necesario que lo hagáis así en esta práctica, pero tenedlo en cuenta en adelante cuando os enfrentéis a resultados muy variables.
+
+Estudio previo
+
+1. Busca que significa hacer “inlining” de una función:
+
+Se conocen como funciones inline a las funciones que, al compilar, no son llamadas en el código objeto, sino insertadas en la sección del código donde se las llame.
+
+2. Busca que opción de compilación individual (no grupos de opciones como -O) de gcc permite al compilador hacer “inlining” de todas las funciones simples. Averigua si esta opción se activa al activar las optimizaciones -O2 del compilador. ¿Para qué sirve la opción -finline-limit?
+
+Añadiendo la opción -finline-functions permite al compilador hacer “inlining” de todas las funciones simples. También se activa al activar las optimizaciones -O2. 
+La opción -finline-limit sirve para limitar el tamaño de las funciones que pueden hacer “inlining”. 
+
+3. Explica una forma práctica de saber si en un programa ensamblador existe la función “Pedrito”. Explica cómo averiguar si, además de existir, esa función es invocada o no.
+
+Para saber si existe la función “Pedrito”, podemos ver si está en la etiqueta .globl. Y para averiguar si esa función es invocada o no, tenemos que ver en el código si se utiliza esa función, si se llama a esa función.
+
+4. Dado el siguiente segmento de código y su traducción a ensamblador (compilado con gcc):
+	
+Calcula cuántas instrucciones estáticas y dinámicas tiene el anterior segmento de código. Si la ejecución tarda 10 ms y 14000000 de ciclos, calcula cuántos MIPS y que IPC, CPI y frecuencia tiene el procesador al ejecutar este código.
+
+Instrucciones estáticas: 5
+Instrucciones dinámicas: 5 * 1000000 = 5000000
+MIPS: 500
+IPC: 0.357
+CPI: 2.8
+Frecuencia: 14000000/10*10^-3 = 1.4 GHz
+
+5. A continuación, analiza el mismo segmento de código compilado con la opción -O:
+
+En este caso el programa tarda 5 ms y 7000000 de ciclos en ejecutarse. Calcula nuevamente los MIPS, el CPI y la frecuencia del procesador e indica cual es el Speedup respecto a la versión anterior. Intenta explicar cuales son las posibles fuentes de las igualdades y diferencias observadas con respecto al apartado anterior.
+
+Instrucciones estáticas: 4
+Instrucciones dinámicas: 4 * 1000000 = 4000000
+MIPS: 800
+CPI: 1.75
+Frecuencia: 7000000/5*10^-3 = 1400000000 = 1.4 GHz
+Speedup: 10/5 = 2
+Las igualdades y diferencias observadas respecto al apartado anterior se deben a que el MIPS y el CPI son diferentes, porque tienen tiempos de ejecución y número de instrucciones diferentes. La frecuencia es la misma debido a que el numero de ciclos es proporcional al tiempo de ejecución.
+
+
+
+6. Si el código anterior es parte de un programa que tarda en ejecutarse (en total) 200 ms (compilado todo él con la opción -O0), calcula cual es el Speedup máximo del programa total si consiguiéramos ejecutar el código anterior de manera instantánea. Calcula también el Speedup del programa completo obtenido al compilar solo el código del ejemplo con la opción -O.
+
+Si el código es instantáneo: 200/190 = 1.053
+Si se compila con -O: 200/195 = 1.026
+
+7. A partir de las herramientas de medida prácticas que se han visto en los apartados anteriores define una forma (qué medir, cómo y qué hacer con el número) para medir el rendimiento (MIPS y CPI) del programa en C que acabamos de ver. Aunque un programa donde se miden los ciclos y el tiempo de ejecución ejecuta más instrucciones que uno que no, no es necesario que tengáis esto en cuenta en esta práctica ya que el efecto es muy pequeño. 
+
+Primero mediante el programa de instrumentación valgrind, obtenemos el número de instrucciones dinámicas. A continuación, compilamos nuestro programa incluyendo el programa tiempo.c (que incluye la librería cycle.h), donde mediante las rutinas GetTime() i getticks() obtenemos el tiempo de ejecución y el número de ciclos. Finalmente aplicando la fórmula número de instrucciones / (10^6 * tiempo de ejecución) obtenemos los MIPS, y el IPC lo obtenemos dividiendo el número de ciclos / número de instrucciones.
+
+8. Un programa dado lo hemos ejecutado 5 veces con los siguientes resultados de tiempo de ejecución: 10 ms, 8ms, 13 ms, 4ms y 2ms. Calcula la media aritmética y geométrica de las 5 medidas. A continuación, descarta las dos medidas extremas y calcula de nuevo la media geométrica y aritmética de los resultados. Explica cuáles son los principales efectos que observáis.
+
+Media geométrica: 6.082
+Media aritmética: 7.4
+Media geométrica sin valores extremos: 6.840
+Media aritmética sin valores extremos: 7.333
+Sin descartar los valores extremos, podemos apreciar una mayor diferencia entre las medias geométricas y aritméticas, en cambio, descartando los valores extremos, esta diferencia se reduce y los valores son más próximos.
+
+
+
+
+
+
+
+
